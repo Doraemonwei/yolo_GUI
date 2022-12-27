@@ -1,5 +1,4 @@
-import os.path
-
+import os
 from PySide2.QtWidgets import QApplication, QMessageBox, QFileDialog, QLabel, QWidget
 from PySide2.QtUiTools import QUiLoader
 from PySide2.QtGui import QIcon, QImage, QPixmap
@@ -35,9 +34,13 @@ class MainWindow(QWidget):
         self.file_path = None
 
         # 定义一个信号，用来判断yolo是否处理完毕
-        _state.yolo_state.connect(self.check_video_image)
+        _state.yolo_state.connect(self.check_video_image_model)
 
-    def check_video_image(self, kind):
+        # 使用的模型
+        self.model_name = r'yolo/yolov5s.pt'
+        self.ui.model_comboBox.activated[str].connect(self.choose_model)
+
+    def check_video_image_model(self, kind):
         if kind == 0:
             self.show_image()
         else:
@@ -45,12 +48,18 @@ class MainWindow(QWidget):
 
     def image_button_clicked(self):
         self.file_path = self.open_file("图片")
+        if not self.model_name:
+            QMessageBox.critical(self.ui, '警告', '请选择模型!')
+            return
         self.ui.label.setText('YOLO处理中......')
         th = threading.Thread(target=self.yolo_detect, args=(0,))
         th.start()
 
     def video_button_clicked(self):
         self.file_path = self.open_file("视频")
+        if not self.model_name:
+            QMessageBox.critical(self.ui, '警告', '请选择模型!')
+            return
         self.ui.label.setText('YOLO处理中......')
         th = threading.Thread(target=self.yolo_detect, args=(1,))
         th.start()
@@ -125,8 +134,12 @@ class MainWindow(QWidget):
 
     def yolo_detect(self, kind):
         (path, filename) = os.path.split(self.file_path)
-        detect.parse_opt(self.file_path, path)
+        detect.parse_opt(self.file_path, path, self.model_name)
         _state.yolo_state.emit(kind)
+
+    def choose_model(self):
+        self.model_name = os.path.join('yolo', self.ui.model_comboBox.currentText()+'.pt')
+        print('已选择模型路径为：{}'.format(self.model_name))
 
 
 if __name__ == "__main__":
