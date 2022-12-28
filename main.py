@@ -13,6 +13,8 @@ import threading
 class MySignals(QObject):
     # emit(0)表示是视频，1 表示是图片
     yolo_state = Signal(int)
+    # 当yolo正在处理的时候关掉按钮
+    button_state = Signal()
 
 
 _state = MySignals()
@@ -35,6 +37,7 @@ class MainWindow(QWidget):
 
         # 定义一个信号，用来判断yolo是否处理完毕
         _state.yolo_state.connect(self.check_video_image_model)
+        _state.button_state.connect(self.change_button_state)
 
         # 使用的模型
         self.model_name = r'yolo/yolov5s.pt'
@@ -48,15 +51,23 @@ class MainWindow(QWidget):
 
     def image_button_clicked(self):
         self.file_path = self.open_file("图片")
+        if not self.file_path:
+            return
         if not self.model_name:
             QMessageBox.critical(self.ui, '警告', '请选择模型!')
             return
         self.ui.label.setText('YOLO处理中......')
+        self.ui.pushButton.setEnabled(False)
+        self.ui.pushButton_2.setEnabled(False)
+
         th = threading.Thread(target=self.yolo_detect, args=(0,))
         th.start()
 
     def video_button_clicked(self):
         self.file_path = self.open_file("视频")
+        if not self.file_path:
+            return
+
         if not self.model_name:
             QMessageBox.critical(self.ui, '警告', '请选择模型!')
             return
@@ -136,10 +147,15 @@ class MainWindow(QWidget):
         (path, filename) = os.path.split(self.file_path)
         detect.parse_opt(self.file_path, path, self.model_name)
         _state.yolo_state.emit(kind)
+        _state.button_state.emit()
 
     def choose_model(self):
-        self.model_name = os.path.join('yolo', self.ui.model_comboBox.currentText()+'.pt')
+        self.model_name = os.path.join('yolo', self.ui.model_comboBox.currentText() + '.pt')
         print('已选择模型路径为：{}'.format(self.model_name))
+
+    def change_button_state(self):
+        self.ui.pushButton.setEnabled(True)
+        self.ui.pushButton_2.setEnabled(True)
 
 
 if __name__ == "__main__":
