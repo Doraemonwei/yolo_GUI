@@ -1,9 +1,9 @@
-import os
+import os, sys
 from PySide2.QtWidgets import QApplication, QMessageBox, QFileDialog, QLabel, QWidget
 from PySide2.QtUiTools import QUiLoader
 from PySide2.QtGui import QIcon, QImage, QPixmap
-from PySide2 import QtCore
-from PySide2.QtCore import QTimer, QSize, Signal, QObject
+from PySide2 import QtCore, QtGui
+from PySide2.QtCore import QTimer, QSize, Signal, QObject, QEventLoop
 import cv2
 from yolo import detect
 import threading
@@ -15,6 +15,17 @@ class MySignals(QObject):
     yolo_state = Signal(int)
     # 当yolo正在处理的时候关掉按钮
     button_state = Signal()
+
+    textWritten = Signal(str)  # 定义一个发送str的信号，这里用的方法名与PyQt5不一样
+
+    # 这个write函数的名字不能改，他会覆盖掉sys.stdout原来的那个write方法
+    def write(self, text):
+        self.textWritten.emit(str(text))
+
+    # 必须要有这个函数，虽然它没实际用，不然会报错
+    def flush(self):  # real signature unknown; restored from __doc__
+        """ flush(self) """
+        pass
 
 
 _state = MySignals()
@@ -37,11 +48,17 @@ class MainWindow(QWidget):
 
         # 定义一个信号，用来判断yolo是否处理完毕
         _state.yolo_state.connect(self.check_video_image_model)
-        _state.button_state.connect(self.change_button_state)
+        _state.button_state.connect(self.open_button_state)
 
         # 使用的模型
         self.model_name = r'yolo/yolov5s.pt'
         self.ui.model_comboBox.activated[str].connect(self.choose_model)
+
+        # 输出结果重定向
+        sys.stdout = MySignals()
+        self.ui.textEdit.connect(sys.stdout, QtCore.SIGNAL("textWritten(QString)"), self.outputWritten)
+        sys.stderr = MySignals()
+        self.ui.textEdit.connect(sys.stderr, QtCore.SIGNAL("textWritten(QString)"), self.outputWritten)
 
     def check_video_image_model(self, kind):
         if kind == 0:
@@ -72,6 +89,8 @@ class MainWindow(QWidget):
             QMessageBox.critical(self.ui, '警告', '请选择模型!')
             return
         self.ui.label.setText('YOLO处理中......')
+        self.ui.pushButton.setEnabled(False)
+        self.ui.pushButton_2.setEnabled(False)
         th = threading.Thread(target=self.yolo_detect, args=(1,))
         th.start()
 
@@ -153,9 +172,17 @@ class MainWindow(QWidget):
         self.model_name = os.path.join('yolo', self.ui.model_comboBox.currentText() + '.pt')
         print('已选择模型路径为：{}'.format(self.model_name))
 
-    def change_button_state(self):
+    def open_button_state(self):
         self.ui.pushButton.setEnabled(True)
         self.ui.pushButton_2.setEnabled(True)
+
+    # 输出的字符追加到 QTextEdit 中
+    def outputWritten(self, text):
+        cursor = self.ui.textEdit.textCursor()
+        cursor.movePosition(QtGui.QTextCursor.End)
+        cursor.insertText(text)
+        self.ui.textEdit.setTextCursor(cursor)
+        self.ui.textEdit.ensureCursorVisible()
 
 
 if __name__ == "__main__":
